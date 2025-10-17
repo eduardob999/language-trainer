@@ -1,149 +1,86 @@
 #!/usr/bin/env python3
-"""
-Utility functions for the language-trainer application.
+"""Minimal safe utilities for language-trainer.
+
+This module provides simple, defensive helpers for JSON/CSV I/O and
+small logging helpers that sanitize messages before writing them to
+CSV files. The goal is to avoid storing secrets or very large values
+in repository logs.
 """
 
-import os
+from pathlib import Path
 import json
 import csv
-from pathlib import Path
+import os
 from datetime import datetime
 
 
-def load_json(filepath):
-    """
-    Load JSON data from a file.
-    
-    Args:
-        filepath: Path to the JSON file
-        
-    Returns:
-        Parsed JSON data
-    """
-    with open(filepath, 'r', encoding='utf-8') as f:
+def load_json(path):
+    with open(path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
 
-def save_json(data, filepath):
-    """
-    Save data to a JSON file.
-    
-    Args:
-        data: Data to save
-        filepath: Path to save the JSON file
-    """
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    with open(filepath, 'w', encoding='utf-8') as f:
+def save_json(data, path):
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+    try:
+        os.chmod(p, 0o600)
+    except Exception:
+        pass
 
 
-def load_csv(filepath):
-    """
-    Load CSV data from a file.
-    
-    Args:
-        filepath: Path to the CSV file
-        
-    Returns:
-        List of dictionaries representing CSV rows
-    """
-    with open(filepath, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        return list(reader)
+def load_csv(path):
+    with open(path, 'r', encoding='utf-8') as f:
+        return list(csv.DictReader(f))
 
 
-def append_csv(data, filepath, fieldnames=None):
-    """
-    Append data to a CSV file.
-    
-    Args:
-        data: Dictionary of data to append
-        filepath: Path to the CSV file
-        fieldnames: List of field names (optional, inferred from data if not provided)
-    """
-    file_exists = os.path.isfile(filepath)
-    
+def append_csv(row, path, fieldnames=None):
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    exists = p.exists()
     if fieldnames is None:
-        fieldnames = list(data.keys())
-    
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    
-    with open(filepath, 'a', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        
-        if not file_exists:
-            writer.writeheader()
-        
-        writer.writerow(data)
+        fieldnames = list(row.keys())
+    with open(p, 'a', newline='', encoding='utf-8') as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        if not exists:
+            w.writeheader()
+        w.writerow(row)
+    try:
+        os.chmod(p, 0o600)
+    except Exception:
+        pass
 
 
-def log_event(message, log_type='info', log_file='source/data/csv/log.csv'):
-    """
-    Log an event to the CSV log file.
-    
-    Args:
-        message: Log message
-        log_type: Type of log (info, warning, error)
-        log_file: Path to the log file
-    """
-    timestamp = datetime.now().isoformat()
-    log_entry = {
-        'timestamp': timestamp,
-        'type': log_type,
-        'message': message
-    }
-    append_csv(log_entry, log_file, fieldnames=['timestamp', 'type', 'message'])
+def _sanitize(msg, max_len=1000):
+    if msg is None:
+        return ''
+    s = str(msg)
+    s = s.replace('\n', ' ').replace('\r', ' ')
+    if len(s) > max_len:
+        return s[:max_len] + '...'
+    return s
 
 
-def log_error(error_message, error_file='source/data/csv/error_log.csv'):
-    """
-    Log an error to the error log file.
-    
-    Args:
-        error_message: Error message
-        error_file: Path to the error log file
-    """
-    timestamp = datetime.now().isoformat()
-    error_entry = {
-        'timestamp': timestamp,
-        'error': error_message
-    }
-    append_csv(error_entry, error_file, fieldnames=['timestamp', 'error'])
+def log_event(message, log_file='source/data/csv/log.csv'):
+    entry = {'timestamp': datetime.utcnow().isoformat() + 'Z', 'message': _sanitize(message)}
+    append_csv(entry, log_file, fieldnames=['timestamp', 'message'])
 
 
-def ensure_dir(directory):
-    """
-    Ensure a directory exists, create it if it doesn't.
-    
-    Args:
-        directory: Path to the directory
-    """
-    Path(directory).mkdir(parents=True, exist_ok=True)
+def log_error(message, error_file='source/data/csv/error_log.csv'):
+    entry = {'timestamp': datetime.utcnow().isoformat() + 'Z', 'error': _sanitize(message)}
+    append_csv(entry, error_file, fieldnames=['timestamp', 'error'])
+
+
+def ensure_dir(path):
+    Path(path).mkdir(parents=True, exist_ok=True)
 
 
 def get_project_root():
-    """
-    Get the project root directory.
-    
-    Returns:
-        Path to the project root
-    """
-    current_file = Path(__file__).resolve()
-    # Navigate up from source/code to project root
-    return current_file.parent.parent.parent
+    return Path(__file__).resolve().parent.parent.parent
 
 
 def get_data_path(subdir=''):
-    """
-    Get the path to the data directory.
-    
-    Args:
-        subdir: Subdirectory within data (e.g., 'json', 'csv')
-        
-    Returns:
-        Path to the data directory
-    """
     root = get_project_root()
-    if subdir:
-        return root / 'source' / 'data' / subdir
-    return root / 'source' / 'data'
+    data = root / 'source' / 'data'
+    return data / subdir if subdir else data

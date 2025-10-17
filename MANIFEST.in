@@ -1,0 +1,5 @@
+include README.md
+include config.json
+include .env
+recursive-include source/data *.json
+recursive-include source/data *.csv

@@ -1,0 +1,3 @@
+timestamp,type,message
+2025-10-17T14:26:07.907509,info,Application started
+2025-10-17T14:26:07.907618,warning,Warning: test warning

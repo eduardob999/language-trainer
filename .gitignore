@@ -144,6 +144,13 @@ ENV/
 env.bak/
 venv.bak/
 
+# Project-specific directories
+backup/
+temp/
+
+# Development symlink
+language_trainer
+
 # Spyder project settings
 .spyderproject
 .spyproject
